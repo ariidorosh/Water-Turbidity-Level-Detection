@@ -21,18 +21,11 @@ def _safe_stem(p: str) -> str:
 
 def process_video(
     video_path: str | None,
-    force_mode: str,
+    model_choice: str,
     every_n: int,
     img_size: int,
     ckpt_dir: str,
 ):
-    """
-    Повертає:
-      - out_video_path (preview)
-      - download_btn update (value + visible)
-      - used_model_str
-      - status_str
-    """
     if not video_path:
         return None, gr.update(value=None, visible=False), "", "Завантаж відео зліва."
 
@@ -41,7 +34,7 @@ def process_video(
 
     stem = _safe_stem(video_path)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = outputs_dir / f"{stem}_{force_mode}_viz_{ts}.mp4"
+    out_path = outputs_dir / f"{stem}_{model_choice}_viz_{ts}.mp4"
 
     try:
         out_video, used_mode = run_infer_video(
@@ -50,12 +43,12 @@ def process_video(
             img=int(img_size),
             every=max(1, int(every_n)),
             ckpt_dir=ckpt_dir,
-            force=force_mode,
+            model_choice=model_choice,
         )
-        status = f"Готово ✅ (модель: {used_mode})"
+        status = f"Готово (модель: {used_mode})"
         return out_video, gr.update(value=out_video, visible=True), used_mode, status
     except Exception as e:
-        return None, gr.update(value=None, visible=False), "", f"Помилка ❌: {e}"
+        return None, gr.update(value=None, visible=False), "", f"Помилка: {e}"
 
 
 def build_ui():
@@ -65,9 +58,9 @@ def build_ui():
         gr.Markdown(
             f"# {APP_TITLE}\n"
             f"1) Завантаж відео зліва  \n"
-            f"2) Прогін стартує **автоматично**  \n"
+            f"2) Прогін стартує автоматично  \n"
             f"3) Дивись результат справа і (якщо треба) завантаж нижче\n\n"
-            f"**Пристрій:** `{device}`"
+            f"Пристрій: `{device}`"
         )
 
         with gr.Row():
@@ -77,7 +70,7 @@ def build_ui():
                 format="mp4",
             )
             out_video = gr.Video(
-                label="Результат (з підписом класу)",
+                label="Результат (панель ймовірностей + вибраний клас)",
                 elem_id="out_video",
                 format="mp4",
                 interactive=False,
@@ -85,14 +78,14 @@ def build_ui():
 
         with gr.Accordion("Налаштування (можна не чіпати)", open=False):
             with gr.Row():
-                force_mode = gr.Dropdown(
+                model_choice = gr.Dropdown(
                     choices=[
-                        ("Auto (якщо є video_best.pt, інакше single_best.pt)", "auto"),
-                        ("T4 модель (video_best.pt)", "t4"),
-                        ("Single (single_best.pt + усереднення 4 кадрів)", "single"),
+                        ("Single Best (single_best.pt)", "single_best"),
+                        ("Team model A (turbidity_net_optimized (1).pth)", "turbidity_net_optimized"),
+                        ("Team model B (best_turbidity_model.pkl)", "best_turbidity_model_pkl"),
                     ],
-                    value="auto",
-                    label="Режим",
+                    value="single_best",
+                    label="Модель",
                 )
                 every_n = gr.Slider(
                     minimum=1,
@@ -115,7 +108,7 @@ def build_ui():
 
         with gr.Group():
             download_btn = gr.DownloadButton(
-                label="⬇️ Завантажити результат",
+                label="Завантажити результат",
                 value=None,
                 visible=False,
                 elem_id="download_btn",
@@ -125,18 +118,16 @@ def build_ui():
 
         gr.Markdown("Результати зберігаються в папці `outputs/`.")
 
-        # Автозапуск при завантаженні/зміні відео
         in_video.change(
             fn=process_video,
-            inputs=[in_video, force_mode, every_n, img_size, ckpt_dir],
+            inputs=[in_video, model_choice, every_n, img_size, ckpt_dir],
             outputs=[out_video, download_btn, used_model, status],
             queue=True,
         )
 
-        # Ручний перезапуск після зміни налаштувань
         run_btn.click(
             fn=process_video,
-            inputs=[in_video, force_mode, every_n, img_size, ckpt_dir],
+            inputs=[in_video, model_choice, every_n, img_size, ckpt_dir],
             outputs=[out_video, download_btn, used_model, status],
             queue=True,
         )
@@ -145,7 +136,6 @@ def build_ui():
 
 
 CSS = """
-/* Фіксуємо висоту блоків з відео */
 #in_video, #out_video {
     height: 420px !important;
     max-height: 420px !important;
@@ -157,8 +147,6 @@ CSS = """
     object-fit: contain;
     background: #111;
 }
-
-/* Кнопка download акуратніше */
 #download_btn { margin-top: 10px; }
 """
 
